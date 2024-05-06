@@ -20,6 +20,7 @@
 #include "math.h"
 
 using namespace vex;
+using signature = vision::signature;
 
 // A global instance of competition
 competition Competition;
@@ -56,6 +57,7 @@ struct tVisionSample {
 };
 
 struct tVisionStats {
+  float range;
   float xMean, xVar;
   float yMean, yVar;
   float sizeMean, sizeVar;
@@ -68,6 +70,13 @@ struct tVisionStats {
 tVisionSample visionSamples[SAMPLE_WINDOW];
 int curVisionSample = 0;
 tVisionStats visionStats;
+
+#define VISIONOPT 1
+#ifdef VISIONOPT
+bool bIsVisionOpt = false;
+float fGreenRange = 0.0;
+signature Vision8__TEMP;
+#endif
 
 void calcVisionStats()
 {
@@ -125,10 +134,12 @@ void calcVisionStats()
   visionStats.countMean = countMean;
   visionStats.countVar = countVar;
   visionStats.totalValid = validSamples;
+  visionStats.range = fGreenRange;
 }
 
 uint32_t lastPrintTime = 0;
 bool bIsSampling = true;
+bool bSamplingQueued = false;
 int visionRunTime = 0;
 uint32_t loopTime = 0;
 int loopCount = 0;
@@ -138,7 +149,7 @@ void hasGreenCallback() {
 
   uint32_t startTime = vex::timer::system();
 
-  int objectCount = Vision8.takeSnapshot(Vision8__GREENBOX1);
+  int objectCount = Vision8.takeSnapshot(Vision8__TEMP);
   bool dsDetected = DistanceSensor.isObjectDetected();
   if (dsDetected) dsDistance = (int) DistanceSensor.objectDistance(mm);
   else dsDistance = -1;
@@ -162,7 +173,7 @@ void hasGreenCallback() {
     bGreenCentered = (!ISLEFT(greenX) && !ISRIGHT(greenX)) ? true : false;
     greenDiagSize = int(sqrtf(triball.width * triball.height) + 0.5);
     bGreenFound = (greenDiagSize > DETECTSIZE) ? true : false;
-    if (bIsSampling) {
+    if (bIsSampling && !bSamplingQueued) {
       visionSamples[curVisionSample].x = triball.centerX;
       visionSamples[curVisionSample].y = triball.centerY;           
       visionSamples[curVisionSample].size = greenDiagSize;           
@@ -171,15 +182,34 @@ void hasGreenCallback() {
   } else {
     bGreenFound = false;
     bGreenCentered = false;
-    if (bIsSampling) {
+    if (bIsSampling && !bSamplingQueued) {
       visionSamples[curVisionSample].count = objectCount;    
     }
   }
-  if (bIsSampling) {
-  curVisionSample++;
+  if (bIsSampling && !bSamplingQueued) {
+    curVisionSample++;
     if (curVisionSample >= SAMPLE_WINDOW) {
       calcVisionStats();
       curVisionSample = 0;
+#ifdef VISIONOPT
+      if (bIsVisionOpt) {
+        fGreenRange += 0.25;
+        if (fGreenRange > 20.0) fGreenRange = 0.0;
+        signature Vision8__TEMP =
+          signature(
+            1,
+            Vision8__GREENBOX1.uMin,
+            Vision8__GREENBOX1.uMax,
+            Vision8__GREENBOX1.uMean,
+            Vision8__GREENBOX1.vMin,
+            Vision8__GREENBOX1.vMax,
+            Vision8__GREENBOX1.vMean,
+            fGreenRange,
+            0);
+        Vision8.setSignature(Vision8__TEMP);
+      }
+#endif
+      bSamplingQueued = true;
     }
   }
 
@@ -210,21 +240,24 @@ void printVisionStats() {
     Brain.Screen.print("%0.1f | %3d,%3d | %3dx%3d\n",
       greenAngle, greenX, greenY,
       greenW, greenH);
-    printf("angle: %0.1f, dist: %.1f/%f, center: %3d,%3d, dim: %3dx%3d\n",
+    printf("angle: %0.1f, dist: %.1f/%f, center: %3d,%3d, dim: %3dx%3d, rt %d\n",
       greenAngle, greenDistMM / (2.54 * 10.0), (dsDistance > 0) ? (float) dsDistance / (2.54 * 10.0) : -1.0, greenX, greenY,
-      greenW, greenH); 
+      greenW, greenH,
+      visionRunTime); 
   } else {
     if (printThis) {
       Brain.Screen.print("No Green Object");
     }
   }
-  if (bIsSampling) {
-      printf("vision stats: %d x(%.2f, %0.2f) y(%.2f, %0.2f) s(%.2f, %0.2f, %d) c(%.2f, %0.2f)\n",
+  if (bIsSampling && bSamplingQueued) {
+      printf("vision stats: %d %.2f x(%.2f, %0.2f) y(%.2f, %0.2f) s(%.2f, %0.2f, %d) c(%.2f, %0.2f)\n",
         visionStats.totalValid,
+        visionStats.range,
         visionStats.xMean, visionStats.xVar,
         visionStats.yMean, visionStats.yVar,
         visionStats.sizeMean, visionStats.sizeVar, visionStats.maxSize,
         visionStats.countMean, visionStats.countVar);
+      bSamplingQueued = false;
   }
 }
 
@@ -521,7 +554,8 @@ typedef enum EUIMODE {
   UIIDLE = 0,
   UIDRIVERCONTROL = 1,
   UIVISIONTEST = 2,
-  UIGYROTEST = 3,
+  UIVISIONOPT = 3,
+  UIGYROTEST = 4,
 };
 
 EUIMODE uiMode = UIIDLE;
@@ -537,6 +571,26 @@ int VisionThread()
 {
   // TODO: Camera finish power-up on initial boot
   printf("Vision Thread ...\n");
+
+  uint8_t red, green, blue;
+  Vision8.getWhiteBalanceValues(&red, &green, &blue);
+  printf("Camera white balance: %3d,%3d,%3d\n", red, green, blue);
+
+  fGreenRange = Vision8__GREENBOX1.range;
+  signature Vision8__TEMP =
+    signature(
+      1,
+      Vision8__GREENBOX1.uMin,
+      Vision8__GREENBOX1.uMax,
+      Vision8__GREENBOX1.uMean,
+      Vision8__GREENBOX1.vMin,
+      Vision8__GREENBOX1.vMax,
+      Vision8__GREENBOX1.vMean,
+      fGreenRange,
+      0);
+
+  Vision8.setSignature(Vision8__TEMP);
+
   checkGreen(hasGreenCallback);
 
   // Prevent main from exiting with an infinite loop.
@@ -590,6 +644,19 @@ void OnButtonXPressed()
   }
 }
 
+#ifdef VISIONOPT
+void OnButtonYPressed()
+{
+  if (!bIsVisionOpt) {
+    printf("Vision Optimization On\n");
+    bIsVisionOpt = true;
+  } else {
+    printf("Vision Optimization Off\n");
+    bIsVisionOpt = false;
+  }
+}
+#endif
+
 EUIMODE lastUiMode = UINONE;
 
 void usercontrol(void) {
@@ -604,6 +671,7 @@ void usercontrol(void) {
   Controller1.ButtonA.pressed(OnButtonAPressed);
   Controller1.ButtonB.pressed(OnButtonBPressed);
   Controller1.ButtonX.pressed(OnButtonXPressed);
+  Controller1.ButtonY.pressed(OnButtonYPressed);
 
   uiMode = UIIDLE;
 

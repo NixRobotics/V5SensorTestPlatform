@@ -27,6 +27,7 @@ smartdrive Drivetrain = smartdrive(LeftMotorGroup, RightMotorGroup, InertialSens
 //     signature(2, -5767, -4965, -5366, -3803, -2861, -3332, 9.0, 0);
 signature Vision8__GREENBOX1 =
     signature(1, -5113, -4239, -4676, -4311, -3567, -3938, 8.000, 0);
+signature Vision8__SIG_1 = signature(1, 0, 0, 0, 0, 0, 0, 2.5, 0);
 signature Vision8__SIG_2 = signature(2, 0, 0, 0, 0, 0, 0, 2.5, 0);
 signature Vision8__SIG_3 = signature(3, 0, 0, 0, 0, 0, 0, 2.5, 0);
 signature Vision8__SIG_4 = signature(4,  0, 0, 0, 0, 0, 0, 2.5, 0);
@@ -35,7 +36,7 @@ signature Vision8__SIG_6 = signature(6, 0, 0, 0, 0, 0, 0, 2.5, 0);
 signature Vision8__SIG_7 = signature(7, 0, 0, 0, 0, 0, 0, 2.5, 0);
 // vision Vision8 = vision(PORT8);
 vision Vision8 =
-    vision(PORT8, 50, Vision8__GREENBOX1, Vision8__SIG_2, Vision8__SIG_3,
+    vision(PORT8, 50, Vision8__SIG_1, Vision8__SIG_2, Vision8__SIG_3,
            Vision8__SIG_4, Vision8__SIG_5, Vision8__SIG_6, Vision8__SIG_7);
 
 // https://www.vexforum.com/t/vexcode-motor-groups-and-drivetrain-example/69161
