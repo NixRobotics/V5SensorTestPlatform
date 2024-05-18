@@ -12,8 +12,7 @@ extern smartdrive Drivetrain;
 // extern drivetrain Drivetrain;
 extern inertial InertialSensor;
 extern distance DistanceSensor;
-extern vision::signature Vision8__GREENBOX1;
-extern vision Vision8;
+
 
 /**
  * Used to initialize code/tasks/devices added using tools in VEXcode Pro.

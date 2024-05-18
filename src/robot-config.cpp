@@ -1,8 +1,6 @@
 #include "vex.h"
 
 using namespace vex;
-using signature = vision::signature;
-using code = vision::code;
 
 // A global instance of brain used for printing to the V5 Brain screen
 brain  Brain;
@@ -20,24 +18,6 @@ distance DistanceSensor = distance(PORT7);
 // gyro TurnGyroSmart = gyro(Brain.ThreeWirePort.D);
 smartdrive Drivetrain = smartdrive(LeftMotorGroup, RightMotorGroup, InertialSensor, 6.283185, 14.25, 14.5, inches, 1);
 // drivetrain Drivetrain = drivetrain(LeftMotorGroup, RightMotorGroup, 6.283185, 14.75, 14.5, inches, 1);
-
-// signature Vision8__BLUEBOX =
-//     signature(1, -3441, -2785, -3113, 8975, 10355, 9665, 2.5, 0);
-// signature Vision8__GREENBOX =
-//     signature(2, -5767, -4965, -5366, -3803, -2861, -3332, 9.0, 0);
-signature Vision8__GREENBOX1 =
-    signature(1, -5113, -4239, -4676, -4311, -3567, -3938, 8.000, 0);
-signature Vision8__SIG_1 = signature(1, 0, 0, 0, 0, 0, 0, 2.5, 0);
-signature Vision8__SIG_2 = signature(2, 0, 0, 0, 0, 0, 0, 2.5, 0);
-signature Vision8__SIG_3 = signature(3, 0, 0, 0, 0, 0, 0, 2.5, 0);
-signature Vision8__SIG_4 = signature(4,  0, 0, 0, 0, 0, 0, 2.5, 0);
-signature Vision8__SIG_5 = signature(5, 0, 0, 0, 0, 0, 0, 2.5, 0);
-signature Vision8__SIG_6 = signature(6, 0, 0, 0, 0, 0, 0, 2.5, 0);
-signature Vision8__SIG_7 = signature(7, 0, 0, 0, 0, 0, 0, 2.5, 0);
-// vision Vision8 = vision(PORT8);
-vision Vision8 =
-    vision(PORT8, 50, Vision8__SIG_1, Vision8__SIG_2, Vision8__SIG_3,
-           Vision8__SIG_4, Vision8__SIG_5, Vision8__SIG_6, Vision8__SIG_7);
 
 // https://www.vexforum.com/t/vexcode-motor-groups-and-drivetrain-example/69161
 // https://www.vexforum.com/t/how-do-i-set-up-the-heading-for-an-inertial-sensor/84238
