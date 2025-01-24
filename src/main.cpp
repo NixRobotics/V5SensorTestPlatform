@@ -104,6 +104,11 @@ void DriverControl()
   Brain.Screen.newLine();
   printf("heading: %0.2lf, %0.2lf\n", InertialSensor.heading(degrees), Drivetrain.heading());
   printf("%0.2lf, %0.2lf, %0.2lf\n", InertialSensor.roll(), InertialSensor.pitch(), InertialSensor.yaw());
+  
+  Controller1.Screen.setCursor(3, 1);
+  Controller1.Screen.print("H: %03d", (int) InertialSensor.heading(degrees));
+  Controller1.Screen.newLine();
+
 
   int count = 0;
 
@@ -118,7 +123,7 @@ void DriverControl()
     // ........................................................................
 
     MecanumDrive(
-      Controller1.Axis2.position(vex::percent),
+      Controller1.Axis3.position(vex::percent),
       Controller1.Axis4.position(vex::percent),
       Controller1.Axis1.position(vex::percent)
       );
@@ -129,13 +134,32 @@ void DriverControl()
                     // prevent wasted resources.
     count++;
     if (count == 50) {
+      double RAD_TO_DEG = 180.0 / M_PI;
+      double DEG_TO_RAD = M_PI / 180.0;
+      double Ax = InertialSensor.acceleration(vex::axisType::xaxis);
+      double Ay = InertialSensor.acceleration(vex::axisType::yaxis);
+      double Az = InertialSensor.acceleration(vex::axisType::zaxis);
+      double roll = 180.0 + atan2(Ay, Az) * RAD_TO_DEG;
+      double pitch = -(180.0 + atan2(Ax, Az) * RAD_TO_DEG);
+      double Ax_r = Ax * sin(pitch * DEG_TO_RAD);
+
       printf("heading: %0.2lf, %0.2lf\n", InertialSensor.heading(degrees), Drivetrain.heading());
-      printf("roll: %0.2lf, pitch: %0.2lf, yaw: %0.2lf\n", InertialSensor.roll(), InertialSensor.pitch(), InertialSensor.yaw());
-      printf("X: %0.2lf, Y: %0.2lf, Z: %0.2lf\n", InertialSensor.acceleration(vex::axisType::xaxis), InertialSensor.acceleration(vex::axisType::yaxis), InertialSensor.acceleration(vex::axisType::zaxis));
+      printf("roll: %0.2lf/%0.2lf, pitch: %0.2lf/%0.2lf, yaw: %0.2lf\n", InertialSensor.roll(), roll, InertialSensor.pitch(), pitch, InertialSensor.yaw());
+      printf("X: %0.5lf/%-.5lf, Y: %0.5lf, Z: %0.5lf\n", Ax, Ax_r, Ay, Az);
+      
+      Controller1.Screen.setCursor(3, 1);
+      Controller1.Screen.print("H: %03d", (int) InertialSensor.heading(degrees));
+      Controller1.Screen.newLine();
+
       count = 0;
     }
   }
 
+}
+
+void StartInertial()
+{
+  
 }
 
 /*---------------------------------------------------------------------------*/
@@ -298,6 +322,7 @@ void usercontrol(void) {
 
   uiMode = UIIDLE;
 
+  StartInertial();
   StartVision();
 
   while (1) {

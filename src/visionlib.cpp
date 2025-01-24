@@ -165,8 +165,8 @@ void hasGreenCallback() {
     // assume pixels are linear angle for now
     float fGreenAngle = (greenX - CameraHRES / 2.0) *  CameraHFOV / CameraHRES;
     greenAngle = fGreenAngle;
-    float fMinDistMM = GamePieceHeightMM / sin(CameraVFOV * (2.0 * 3.14159 / 360.0));
-    float fEstDistMM = GamePieceHeightMM / sin(CameraVFOV * (fGreenHeight / CameraVRES) * (2.0 * 3.14159 / 360.0)) ;
+    float fMinDistMM = GamePieceHeightMM / sin(CameraVFOV * (2.0 * M_PI / 360.0));
+    float fEstDistMM = GamePieceHeightMM / sin(CameraVFOV * (fGreenHeight / CameraVRES) * (2.0 * M_PI / 360.0)) ;
     greenDistMM = (int) fEstDistMM;
     bGreenCentered = (!ISLEFT(greenX) && !ISRIGHT(greenX)) ? true : false;
     greenDiagSize = int(sqrtf(triball.width * triball.height) + 0.5);
@@ -216,6 +216,8 @@ void hasGreenCallback() {
 
 }
 
+// define VISION_VERBOSE  1
+
 void printVisionStats() {
 
   uint32_t thisTime = vex::timer::system();
@@ -238,10 +240,12 @@ void printVisionStats() {
     Brain.Screen.print("%0.1f | %3d,%3d | %3dx%3d\n",
       greenAngle, greenX, greenY,
       greenW, greenH);
+#ifdef VISION_VERBOSE
     printf("angle: %0.1f, dist: %.1f/%f, center: %3d,%3d, dim: %3dx%3d, runtime %dms\n",
       greenAngle, greenDistMM / (2.54 * 10.0), (dsDistance > 0) ? (float) dsDistance / (2.54 * 10.0) : -1.0, greenX, greenY,
       greenW, greenH,
       visionRunTime); 
+#endif
   } else {
     if (printThis) {
       Brain.Screen.print("No Green Object");

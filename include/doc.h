@@ -23,4 +23,6 @@ Centered at 12" away, ~145pix high
 
 PIXY: https://docs.pixycam.com/wiki/doku.php?id=wiki:v2:using_color_codes
 
+Odometry: https://www.vexforum.com/t/odometry-code/113522
+
 */
