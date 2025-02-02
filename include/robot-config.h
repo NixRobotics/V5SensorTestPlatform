@@ -12,7 +12,9 @@ extern smartdrive Drivetrain;
 // extern drivetrain Drivetrain;
 extern inertial InertialSensor;
 extern distance DistanceSensor;
-
+extern distance DistanceLeftFront;
+extern distance DistanceLeftRear;
+// gyro TurnGyroSmart = gyro(Brain.ThreeWirePort
 
 /**
  * Used to initialize code/tasks/devices added using tools in VEXcode Pro.

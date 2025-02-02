@@ -95,10 +95,16 @@ void runGyroTest()
 }
 
 bool bCancelDriverControl = false;
+bool bStraightenHeading = false;
+bool bStraightenLeftSide = false;
+bool bAutoCommandRunning = false;
 
 void DriverControl()
 {
-  double endHeading = InertialSensor.heading(vex::degrees);
+  bStraightenHeading = false;
+  bStraightenLeftSide = false;
+  bAutoCommandRunning = false; double endHeading = InertialSensor.heading(vex::degrees);
+
   // double endHeading = Drivetrain.heading(vex::degrees);
   Brain.Screen.print("%.0lf", endHeading);
   Brain.Screen.newLine();
@@ -108,7 +114,6 @@ void DriverControl()
   Controller1.Screen.setCursor(3, 1);
   Controller1.Screen.print("H: %03d", (int) InertialSensor.heading(degrees));
   Controller1.Screen.newLine();
-
 
   int count = 0;
 
@@ -122,11 +127,30 @@ void DriverControl()
     // update your motors, etc.
     // ........................................................................
 
-    MecanumDrive(
-      Controller1.Axis3.position(vex::percent),
-      Controller1.Axis4.position(vex::percent),
-      Controller1.Axis1.position(vex::percent)
-      );
+    if (!bAutoCommandRunning) {
+      if (bStraightenHeading) {
+        bAutoCommandRunning = true;
+        Drivetrain.stop(coast);
+        Drivetrain.setTurnVelocity(50,percent);
+        Drivetrain.turnToHeading(0.0,degrees,false);
+      }
+    } else {
+      if (bStraightenHeading) {
+        if (!Drivetrain.isTurning()) {
+          Drivetrain.stop(coast);
+          bAutoCommandRunning = false;
+          bStraightenHeading = false;
+        }
+      }
+    }
+
+    if (!bAutoCommandRunning) {
+      MecanumDrive(
+        Controller1.Axis3.position(vex::percent),
+        Controller1.Axis4.position(vex::percent),
+        Controller1.Axis1.position(vex::percent)
+        );
+    }
 
     // Drivetrain.arcade(forward, -turn);
 
@@ -146,9 +170,20 @@ void DriverControl()
       printf("heading: %0.2lf, %0.2lf\n", InertialSensor.heading(degrees), Drivetrain.heading());
       printf("roll: %0.2lf/%0.2lf, pitch: %0.2lf/%0.2lf, yaw: %0.2lf\n", InertialSensor.roll(), roll, InertialSensor.pitch(), pitch, InertialSensor.yaw());
       printf("X: %0.5lf/%-.5lf, Y: %0.5lf, Z: %0.5lf\n", Ax, Ax_r, Ay, Az);
-      
+
+      int leftFrontDist = -1, leftRearDist = -1;
+      if (DistanceLeftFront.isObjectDetected() && DistanceLeftFront.objectSize() == sizeType::large) {
+        leftFrontDist = DistanceLeftFront.objectDistance(distanceUnits::mm);
+      }
+      if (DistanceLeftRear.isObjectDetected() && DistanceLeftRear.objectSize() == sizeType::large) {
+        leftRearDist = DistanceLeftRear.objectDistance(distanceUnits::mm);
+      }
+
+      printf("F: %d, R: %d\n", leftFrontDist, leftRearDist);
+
+      Controller1.Screen.clearLine(3);
       Controller1.Screen.setCursor(3, 1);
-      Controller1.Screen.print("H: %03d", (int) InertialSensor.heading(degrees));
+      Controller1.Screen.print("H:%03d,F:%d,R:%d", (int) InertialSensor.heading(degrees), leftFrontDist, leftRearDist);
       Controller1.Screen.newLine();
 
       count = 0;
@@ -178,6 +213,9 @@ void pre_auton(void) {
   printf("pre_auton++\n");
   vexcodeInit();
   printf("pre_auton--\n");
+
+  StartInertial();
+  StartVision();
 
   bRobotInitDone = true;
   
@@ -289,6 +327,18 @@ void OnButtonXPressed()
   }
 }
 
+void OnButtonUpPressed()
+{
+  if (bAutoCommandRunning) return;
+  bStraightenHeading = true;
+}
+
+void OnButtonLeftPressed()
+{
+  if (bAutoCommandRunning) return;
+  bStraightenLeftSide = true;
+}
+
 #ifdef VISIONOPT
 void OnButtonYPressed()
 {
@@ -319,11 +369,13 @@ void usercontrol(void) {
   #ifdef VISIONOPT
   Controller1.ButtonY.pressed(OnButtonYPressed);
   #endif
+  Controller1.ButtonUp.pressed(OnButtonUpPressed);
+  Controller1.ButtonLeft.pressed(OnButtonLeftPressed);
 
   uiMode = UIIDLE;
 
-  StartInertial();
-  StartVision();
+//  StartInertial();
+//  StartVision();
 
   while (1) {
     // This is the main execution loop for the user control program.

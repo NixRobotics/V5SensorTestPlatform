@@ -15,6 +15,8 @@ motor_group LeftMotorGroup = motor_group(LeftRearDriveSmart, LeftFrontDriveSmart
 motor_group RightMotorGroup = motor_group(RightRearDriveSmart, RightFrontDriveSmart);
 inertial InertialSensor = inertial(PORT6);
 distance DistanceSensor = distance(PORT7);
+distance DistanceLeftFront = distance(PORT20);
+distance DistanceLeftRear = distance(PORT19);
 // gyro TurnGyroSmart = gyro(Brain.ThreeWirePort.D);
 smartdrive Drivetrain = smartdrive(LeftMotorGroup, RightMotorGroup, InertialSensor, 6.283185, 14.25, 14.5, inches, 1);
 // drivetrain Drivetrain = drivetrain(LeftMotorGroup, RightMotorGroup, 6.283185, 14.75, 14.5, inches, 1);
@@ -38,7 +40,7 @@ void vexcodeInit( void ) {
     Brain.Screen.setCursor(2, 1);
     // calibrate the drivetrain gyro
     wait(200, msec);
-    InertialSensor.calibrate(2);
+    InertialSensor.calibrate();
     Brain.Screen.print("Calibrating Gyro for Drivetrain");
     // wait for the gyro calibration process to finish
     while (InertialSensor.isCalibrating()) {

@@ -1,7 +1,9 @@
 using namespace vex;
 
-extern vision::signature Vision8__GREENBOX1;
-extern vision Vision8;
+#include "visionstats.h"
+
+extern aivision::colordesc AIVision8__GREENBOX1;
+extern vex::aivision AIVision8;
 
 extern bool bCancelVisionTest;
 
