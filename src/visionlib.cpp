@@ -36,9 +36,10 @@ aivision::colordesc AIVision8__BLUEBOX(3, 7, 56, 188, 10, 0.2);
 // AI Vision Color Descriptions
 aivision::colordesc AIVision8__GRNTRIBALL(1, 66, 168, 107, 25, 0.5);
 aivision::colordesc AIVision8__REDDONUT(2, 199, 18, 101, 24, 0.34);
-aivision::colordesc AIVision8__BLUEDONUT(3, 241, 86, 162, 14, 0.29);
+aivision::colordesc AIVision8__BLUEDONUT(3, 110, 184, 223, 24, 0.3);
 // aivision::colordesc AIVision8__YELLOWMOGO(4, 168, 178, 0, 15, 0.2); // 168,178,0 / 96,109,0
 aivision::colordesc AIVision8__YELLOWMOGO(4, 100, 150, 75, 12, 0.4); // 168,178,0 / 96,109,0
+// aivision::colordesc AIVision8__YELLOWMOGO(4, 62, 105, 50, 15, 0.42);
 
 // Note: hue range is 1-40, saturation range is 0.1-1
 
@@ -51,7 +52,13 @@ enum gameElements {
   mobileGoal,
   redRing,
   blueRing,
+  greenTriball
 };
+int currentTrackingType = mobileGoal;
+const char *triballName = "grntrib"; 
+const char *mogoName = "mogo"; 
+const char *redRingName = "redring"; 
+const char *blueRingName = "bluering"; 
 
 // vex::aivision AIVision8(PORT8, AIVision8__GRNTRIBALL, AIVision8__REDDONUT, AIVision8__BLUEBOX, aivision::ALL_AIOBJS);
 vex::aivision AIVision8(PORT8);
@@ -78,26 +85,31 @@ tObjectDescriptor colObj, aiObj;
 
 const float TriballHeightMM = 6.0 * 2.54 * 10.0; // TODO
 const bool bTriballDetectHeight = true;
+const bool bTriballDetectAI = false;
 #define TRIBALL_DETECTSIZE 14 // filter based on area
 
 const float BlueRignWidthMM = 7.0 * 2.54 * 10.0; // TODO
 const bool bBlueRingDetectHeight = false;
-#define BLUERING_DETECTSIZE 14 // filter based on area
+const bool bBlueRingDetectAI = true;
+#define BLUERING_DETECTSIZE 8 // filter based on area
 
 const float RedRignWidthMM = 7.0 * 2.54 * 10.0; // TODO
 const bool bRedRingDetectHeight = false;
-#define REDRING_DETECTSIZE 14 // filter based on area
+const bool bRedRingDetectAI = true;
+#define REDRING_DETECTSIZE 8 // filter based on area
 
 const float MOGOHeightMM = 10.25 * 2.54 * 10.0; // TODO
-#define MOGO_DETECTSIZE 14 // filter based on area
-
 const float MOGOWidthMM = 7.0 * 2.54 * 10.0; // TODO
 const bool bMogoDetectHeight = false;
-#define MOGO_DETECTSIZE 8 // filter based on area
+const bool bMogoDetectAI = true;
+#define MOGO_DETECTSIZE 6 // filter based on area
 
-float colPysicalDimMM = 0.0;
-bool bColDetecHeight = false;
-int colDetectSize = 0;
+// Have separate ones in case need to use different for AI and color
+int objectType = -1;
+float colPysicalDimMM = 0.0, aiPhysicalDimMM = 0.0;
+bool bColDetectHeight = false, bAIDetectHeight = false;
+int colDetectSize = 0, aiDetectSize = 0;;
+bool bColDetectEnable = false, bAIDetectEnable = false;
 
 const float CameraHFOV = 74.0;
 const float CameraVFOV = 63.0;
@@ -127,6 +139,183 @@ uint32_t loopTime = 0;
 int loopCount = 0;
 int dsDistance = -1;
 
+const char *NextObjectType() {
+  switch (currentTrackingType) {
+    case mobileGoal:
+      currentTrackingType = redRing;
+      return redRingName;
+    case redRing:
+      currentTrackingType = blueRing;
+      return blueRingName;
+    case blueRing:
+      currentTrackingType = greenTriball;
+      return triballName;
+    case greenTriball:
+      currentTrackingType = mobileGoal;
+      return mogoName;
+  }
+
+  return NULL;
+}
+
+const char *CurrentObject() {
+  switch (currentTrackingType) {
+    case mobileGoal:
+      return mogoName;
+    case redRing:
+      return redRingName;
+    case blueRing:
+      return blueRingName;
+    case greenTriball:
+      return triballName;
+  }
+
+  return NULL;
+}
+
+void UpdateDistanceSensor() {
+  bool dsDetected = DistanceSensor.isObjectDetected();
+  if (dsDetected) dsDistance = (int) DistanceSensor.objectDistance(mm);
+  else dsDistance = -1;
+}
+
+void SelectObject(int nextType)
+{
+  static int curType = -1;
+
+  if (nextType == curType) return;
+  curType = nextType;
+
+  printf("Tracking changed to: %d\n", currentTrackingType);
+
+  if (curType == mobileGoal) {
+    iColRed = (int) AIVision8__YELLOWMOGO.red;
+    iColGreen = (int) AIVision8__YELLOWMOGO.green;
+    iColBlue = (int) AIVision8__YELLOWMOGO.blue;
+    iColHue = (int) AIVision8__YELLOWMOGO.hangle;
+    fColSat = AIVision8__YELLOWMOGO.hdsat;
+  
+    if (AIVision8__TEMP != NULL) delete AIVision8__TEMP;
+    AIVision8__TEMP =
+      new aivision::colordesc(
+        1,
+        iColRed,
+        iColGreen,
+        iColBlue,
+        (float) iColHue,
+        fColSat);
+    AIVision8.set(*AIVision8__TEMP);
+
+    if (bMogoDetectHeight) {
+      colPysicalDimMM = MOGOHeightMM;
+      aiPhysicalDimMM = MOGOHeightMM;
+    } else {
+      colPysicalDimMM = MOGOWidthMM;
+      aiPhysicalDimMM = MOGOWidthMM;
+    }
+    bColDetectHeight = bMogoDetectHeight;
+    bAIDetectHeight = bMogoDetectHeight;
+    colDetectSize = aiDetectSize = MOGO_DETECTSIZE;
+    bColDetectEnable = true;
+    bAIDetectEnable = bMogoDetectAI;
+  }
+
+  if (curType == redRing) {
+    iColRed = (int) AIVision8__REDDONUT.red;
+    iColGreen = (int) AIVision8__REDDONUT.green;
+    iColBlue = (int) AIVision8__REDDONUT.blue;
+    iColHue = (int) AIVision8__REDDONUT.hangle;
+    fColSat = AIVision8__REDDONUT.hdsat;
+  
+    if (AIVision8__TEMP != NULL) delete AIVision8__TEMP;
+    AIVision8__TEMP =
+      new aivision::colordesc(
+        1,
+        iColRed,
+        iColGreen,
+        iColBlue,
+        (float) iColHue,
+        fColSat);
+    AIVision8.set(*AIVision8__TEMP);
+
+    if (bRedRingDetectHeight) {
+      colPysicalDimMM = RedRignWidthMM;
+      aiPhysicalDimMM = RedRignWidthMM;
+    } else {
+      colPysicalDimMM = RedRignWidthMM;
+      aiPhysicalDimMM = RedRignWidthMM;
+    }
+    bColDetectHeight = bRedRingDetectHeight;
+    bAIDetectHeight = bRedRingDetectHeight;
+    colDetectSize = aiDetectSize = bRedRingDetectHeight;
+    bColDetectEnable = true;
+    bAIDetectEnable = bRedRingDetectAI;
+  }
+
+  if (curType == blueRing) {
+    iColRed = (int) AIVision8__BLUEDONUT.red;
+    iColGreen = (int) AIVision8__BLUEDONUT.green;
+    iColBlue = (int) AIVision8__BLUEDONUT.blue;
+    iColHue = (int) AIVision8__BLUEDONUT.hangle;
+    fColSat = AIVision8__BLUEDONUT.hdsat;
+  
+    if (AIVision8__TEMP != NULL) delete AIVision8__TEMP;
+    AIVision8__TEMP =
+      new aivision::colordesc(
+        1,
+        iColRed,
+        iColGreen,
+        iColBlue,
+        (float) iColHue,
+        fColSat);
+    AIVision8.set(*AIVision8__TEMP);
+
+    if (bBlueRingDetectHeight) {
+      colPysicalDimMM = BlueRignWidthMM;
+      aiPhysicalDimMM = BlueRignWidthMM;
+    } else {
+      colPysicalDimMM = BlueRignWidthMM;
+      aiPhysicalDimMM = BlueRignWidthMM;
+    }
+    bColDetectHeight = bBlueRingDetectHeight;
+    bAIDetectHeight = bBlueRingDetectHeight;
+    colDetectSize = aiDetectSize = bBlueRingDetectHeight;
+    bColDetectEnable = true;
+    bAIDetectEnable = bBlueRingDetectAI;
+  }
+
+  if (curType == greenTriball) {
+    iColRed = (int) AIVision8__GRNTRIBALL.red;
+    iColGreen = (int) AIVision8__GRNTRIBALL.green;
+    iColBlue = (int) AIVision8__GRNTRIBALL.blue;
+    iColHue = (int) AIVision8__GRNTRIBALL.hangle;
+    fColSat = AIVision8__GRNTRIBALL.hdsat;
+
+    if (AIVision8__TEMP != NULL) delete AIVision8__TEMP; 
+    AIVision8__TEMP =
+      new aivision::colordesc(
+        1,
+        iColRed,
+        iColGreen,
+        iColBlue,
+        (float) iColHue,
+        fColSat);
+    AIVision8.set(*AIVision8__TEMP);
+
+    if (bTriballDetectHeight) {
+      colPysicalDimMM = TriballHeightMM;
+    } else {
+      colPysicalDimMM = TriballHeightMM;
+    }
+
+    bColDetectHeight = bTriballDetectHeight;
+    colDetectSize = TRIBALL_DETECTSIZE;
+    bColDetectEnable = true;
+    bAIDetectEnable = bTriballDetectAI;
+  }
+
+}
+
 void DetectObject(tObjectDescriptor *colObj, bool bDetectHeight, int detectSize)
 {
     float fObjHeight = colObj->height;
@@ -147,7 +336,7 @@ void DetectObject(tObjectDescriptor *colObj, bool bDetectHeight, int detectSize)
     }
     fEstDistMM_2 = sqrtf(fEstDistMM_2 * fEstDistMM_2 - CameraHeightMM * CameraHeightMM);
 
-    // printf("%d, %d, %d, %d, %0.1f, %0.1f, %d\n", triball.centerX, triball.centerY, triball.width, triball.height, fEstDistMM, fEstDistMM_2, dsDistance);
+    // printf("%d, %d, %d, %d, %0.1f, %0.1f, %d\n", colObj->x, colObj->y, colObj->width, colObj->height, fEstDistMM, fEstDistMM_2, dsDistance);
 
     colObj->distMM = (int) fEstDistMM_2;
     colObj->bCentered = (!ISLEFT(colObj->x) && !ISRIGHT(colObj->x)) ? true : false;
@@ -167,9 +356,6 @@ void hasGreenCallback() {
   // AIVision8.takeSnapshot(AIVision8__TEMP);
   AIVision8.takeSnapshot(*AIVision8__TEMP);
   int  visObjectCount = AIVision8.objectCount;
-  bool dsDetected = DistanceSensor.isObjectDetected();
-  if (dsDetected) dsDistance = (int) DistanceSensor.objectDistance(mm);
-  else dsDistance = -1;
 
   colObj.count = visObjectCount;
   // int objectCount = Vision8.takeSnapshot(4);
@@ -181,23 +367,23 @@ void hasGreenCallback() {
     colObj.height = selectedObj.height;
     colObj.width = selectedObj.width;
 
-    DetectObject(&colObj, bColDetecHeight, colDetectSize);
+    DetectObject(&colObj, bColDetectHeight, colDetectSize);
 
     int diagSize = int(sqrtf(colObj.width * colObj.height) + 0.5);
 
     if (bIsSampling && !bSamplingQueued) {
-      vsAddSample(colObj.count, colObj.x, colObj.y, diagSize, colObj.d1, colObj.d2, colObj.d3);
+      vsAddSample(0, colObj.count, colObj.x, colObj.y, diagSize, colObj.d1, colObj.d2, colObj.d3);
     }       
   } else {
     colObj.bFound = false;
     colObj.bCentered = false;
     if (bIsSampling && !bSamplingQueued) {
-      vsAddSample(colObj.count);   
+      vsAddSample(0, colObj.count);   
     }
   }
   if (bIsSampling && !bSamplingQueued) {
-    if (vsUpdateSample()) {
-      calcVisionStats(iColRed, iColGreen, iColBlue, iColHue, fColSat);
+    if (vsUpdateSample(0)) {
+      calcVisionStats(0, iColRed, iColGreen, iColBlue, iColHue, fColSat);
       if (voRun()) {
         iColRed = voRedCur;
         iColGreen = voGreenCur;
@@ -224,8 +410,6 @@ void hasGreenCallback() {
   if (endTime - startTime > visionRunTime) visionRunTime = endTime - startTime;
 
 }
-
-int aiLastObjectType = -1;
 
 struct tAIVisionSample {
   int type;
@@ -277,6 +461,11 @@ void calcAIStats()
 
 void hasAIObjCallback()
 {
+  if (!bAIDetectEnable) {
+    aiObj.bFound = false;
+    return;
+  }
+
   AIVision8.takeSnapshot(aivision::ALL_AIOBJS);
   // Check to see if an AI Classification exists in this snapshot.
   int id, x, y, w, h;
@@ -284,21 +473,28 @@ void hasAIObjCallback()
 
   if (AIVision8.objectCount > 0) {
 
-    id = AIVision8.objects[0].id;
-    x = AIVision8.objects[0].centerX;
-    y = AIVision8.objects[0].centerY;
-    w = AIVision8.objects[0].width;
-    h = AIVision8.objects[0].height;
-    score = AIVision8.objects[0].score;
-    aiObj.count = AIVision8.objectCount;
+    int firstIdx = -1;
+    for (int i = 0; i < AIVision8.objectCount; i++)
+    {
+      if (AIVision8.objects[i].id == currentTrackingType) {
+        firstIdx = i;
+        break;
+      }
+    }
 
-    // Determine which AI Classification is detected.
-    if (AIVision8.objects[0].id == mobileGoal) {
-      // Conditional based on finding a MOGO
+    aiObj.bFound = false;
 
-      aiObj.bFound = false;
+    if (firstIdx >= 0) {
+      id = AIVision8.objects[firstIdx].id;
+      x = AIVision8.objects[firstIdx].centerX;
+      y = AIVision8.objects[firstIdx].centerY;
+      w = AIVision8.objects[firstIdx].width;
+      h = AIVision8.objects[firstIdx].height;
+      score = AIVision8.objects[firstIdx].score;
+      aiObj.count = AIVision8.objectCount;
 
-      if (score > 95) {
+      if (score > 80) {
+        aiObj.type = id;
         aiObj.x = x;
         aiObj.y = y;
         aiObj.height = h;
@@ -307,53 +503,42 @@ void hasAIObjCallback()
         DetectObject(&aiObj, bMogoDetectHeight, MOGO_DETECTSIZE);
 
         int diagSize = int(sqrtf(aiObj.width * aiObj.height) + 0.5);
+
+        if (bIsSampling && !bAISamplingQueued) {
+          // TODO: Only counts first valid object of selected AI type - not the same as color detection which counts all hits on same color
+          vsAddSample(1, 1, aiObj.x, aiObj.y, diagSize, aiObj.d1, aiObj.d2, aiObj.d3);
+        }     
+      } 
+
+    }
+
+    if (!aiObj.bFound) {
+      if (bIsSampling && !bAISamplingQueued) {
+        vsAddSample(1, 0);   
       }
-      
+    }
+
+    // Determine which AI Classification is detected.
+    if (AIVision8.objects[0].id == mobileGoal) {
+      // Conditional based on finding a MOGO
+
       if (bIsSampling && !bAISamplingQueued) {
         aiSamples[curAISample].type = mobileGoal;
-        aiSamples[curAISample].score = score;
-      }                 
-      if (aiLastObjectType != mobileGoal) {
-        aiLastObjectType = mobileGoal;
-        printf("mogo %d\n", aiObj.count);
+        aiSamples[curAISample].score = AIVision8.objects[0].score;
       }
     } else if (AIVision8.objects[0].id == blueRing) {
-
-      float fRingWidth = (float) w;
-      // assume pixels are linear angle for now
-      float fRingAngle = (x - CameraHRES / 2.0) *  CameraHFOV / CameraHRES;
-      aiObj.angle = fRingAngle;
-      float fMinDistMM = BlueRignWidthMM / sin(CameraHFOV * (2.0 * M_PI / 360.0));
-      float fEstDistMM = BlueRignWidthMM / sin(CameraHFOV * (fRingWidth / CameraHRES) * (2.0 * M_PI / 360.0)) ;
-      fEstDistMM = sqrtf(fEstDistMM * fEstDistMM - CameraHeightMM * CameraHeightMM);
-      aiObj.distMM = (int) fEstDistMM;
-      aiObj.bCentered = (!ISLEFT(aiObj.x) && !ISRIGHT(aiObj.x)) ? true : false;
-      int ringDiagSize = int(sqrtf(w * h) + 0.5);
-      aiObj.bFound = (ringDiagSize > BLUERING_DETECTSIZE) ? true : false;
-
-      // Conditional based on finding a blueRing.
-      if (bIsSampling && !bAISamplingQueued) {
-        aiSamples[curAISample].type = blueRing;
-        aiSamples[curAISample].score = score;
-      }     
-      if (aiLastObjectType != blueRing) {
-        aiLastObjectType = blueRing;
-        printf("blue donut %d\n", aiObj.count);
-      }
+        // Conditional based on finding a blueRing.
+        if (bIsSampling && !bAISamplingQueued) {
+          aiSamples[curAISample].type = blueRing;
+          aiSamples[curAISample].score =  AIVision8.objects[0].score;
+        }     
     } else if (AIVision8.objects[0].id == redRing) {
-      // Conditional based on finding a blueBall.
-      aiObj.bFound = false;
-      if (bIsSampling && !bAISamplingQueued) {
-        aiSamples[curAISample].type = redRing;
-        aiSamples[curAISample].score = score;
-      }   
-      if (aiLastObjectType != redRing) {
-        aiLastObjectType = redRing;
-        printf("red donut %d\n", aiObj.count);
-      }
+        // Conditional based on finding a blueBall.
+        if (bIsSampling && !bAISamplingQueued) {
+            aiSamples[curAISample].type = redRing;
+            aiSamples[curAISample].score =  AIVision8.objects[0].score;
+        }   
     } else {
-      aiObj.bFound = false;
-      aiObj.bCentered = false;
       if (bIsSampling && !bAISamplingQueued) {
         aiSamples[curAISample].type = -1;
         aiSamples[curAISample].score = 0.0;
@@ -363,22 +548,18 @@ void hasAIObjCallback()
 
   } else {
     aiObj.bFound = false;
+    aiObj.bCentered = false;
     if (bIsSampling && !bAISamplingQueued) {
       aiSamples[curAISample].type = -1;
+      vsAddSample(1, 0);   
     }   
   }
 
-  if (aiObj.bFound) {
-    aiObj.type = id;
-    aiObj.height = h;
-    aiObj.width = w;
-    aiObj.x = x;
-    aiObj.y = y;
-  }
-
   if (bIsSampling && !bAISamplingQueued) {
+    if (curAISample != curVisionSample[1]) printf("ERROR\n");
     curAISample++;
-    if (curAISample >= SAMPLE_WINDOW) {
+    if (vsUpdateSample(1)) {
+      calcVisionStats(1, -1, -1, -1, -1, -1.0);
       calcAIStats();
       curAISample = 0;
       bAISamplingQueued = true;
@@ -448,21 +629,28 @@ void printVisionStats() {
   }
 
   if (bIsSampling && bSamplingQueued) {
-    if (!voPrint(&visionStats)) {
-      printf("vision stats: v(%d) c(%d,%d,%d,%d,%0.1f) x(%.2f, %0.2f) y(%.2f, %0.2f) s(%.2f, %0.2f, %d) d(%d,%d,%d), c(%.2f, %0.2f)\n",
-        visionStats.totalValid,
-        visionStats.red, visionStats.green, visionStats.blue,
-        visionStats.hue,
-        visionStats.sat,
-        visionStats.xMean, visionStats.xVar,
-        visionStats.yMean, visionStats.yVar,
-        visionStats.sizeMean, visionStats.sizeVar, visionStats.maxSize,
-        visionStats.dist1, visionStats.dist2, visionStats.dist3,
-        visionStats.countMean, visionStats.countVar);
+    if (!voPrint(&(visionStats[0]))) {
+      printf("color stats: v(%d) c(%d,%d,%d,%d,%0.1f) x(%.2f, %0.2f) y(%.2f, %0.2f) s(%.2f, %0.2f, %d) d(%d,%d,%d), c(%.2f, %0.2f)\n",
+        visionStats[0].totalValid,
+        visionStats[0].red, visionStats[0].green, visionStats[0].blue,
+        visionStats[0].hue,
+        visionStats[0].sat,
+        visionStats[0].xMean, visionStats[0].xVar,
+        visionStats[0].yMean, visionStats[0].yVar,
+        visionStats[0].sizeMean, visionStats[0].sizeVar, visionStats[0].maxSize,
+        visionStats[0].dist1, visionStats[0].dist2, visionStats[0].dist3,
+        visionStats[0].countMean, visionStats[0].countVar);
     }
     bSamplingQueued = false;
   }
   if (bIsSampling && bAISamplingQueued) {
+    printf("ai obj stats: v(%d) x(%.2f, %0.2f) y(%.2f, %0.2f) s(%.2f, %0.2f, %d) d(%d,%d,%d), c(%.2f, %0.2f)\n",
+      visionStats[1].totalValid,
+      visionStats[1].xMean, visionStats[1].xVar,
+      visionStats[1].yMean, visionStats[1].yVar,
+      visionStats[1].sizeMean, visionStats[1].sizeVar, visionStats[1].maxSize,
+      visionStats[1].dist1, visionStats[1].dist2, visionStats[1].dist3,
+      visionStats[1].countMean, visionStats[1].countVar);
     printf("ai stats: %d/%0.1f red, %d/%0.1f blue, %d/%0.1f mogo\n",
       aiStats.redTotal,
       aiStats.redScore,
@@ -491,7 +679,8 @@ void runVisionTest()
   bool bIsTurning = false;
   bool bIsDriving = false;
   bool bWasLeft = false;
-  bool bTrackBlueRing = true;
+  bool bTrackAI = true;
+  bool bTrackCol = true;
 
   EDRIVESTATE curState = ALLSTOP;
   EDRIVESTATE nextState;
@@ -500,38 +689,61 @@ void runVisionTest()
   int startCount = 0;
 
   int bSelectedFound = false;
+  int bSelectedLost = true;
   int bSelectedCentered = false;
   float selectedAngle = 0.0;
+  float selectedHeading = 0.0;
+  float selectedApprozDistMM = 0.0; // TODO
   float selectedDistMM = 0.0;
   int selectedX = 0;
+  int lastSeen = 0;
 
   while(!bCancelVisionTest) {
     // TODO: Add last known location to direction of turn
     // Put filter on lost object
 
-    if (bTrackBlueRing) {
+    if (bTrackAI && aiObj.bFound) {
       bSelectedFound = aiObj.bFound;
       bSelectedCentered = aiObj.bCentered;
       selectedAngle = aiObj.angle;
       selectedDistMM = aiObj.distMM;
       selectedX = aiObj.x;
-    } else {
+      // printf("AI: ang=%d, d=%d, x= %d\n", (int) selectedAngle, (int) selectedDistMM, (int) selectedX);
+    } else if (bTrackCol && colObj.bFound) {
       bSelectedFound = colObj.bFound;
       bSelectedCentered = colObj.bCentered;
       selectedAngle = colObj.angle;
       selectedDistMM = colObj.distMM;
       selectedX = colObj.x;
+      // printf("Col: ang=%d, d=%d, x= %d\n", (int) selectedAngle, (int) selectedDistMM, (int) selectedX);
+    } else {
+      bSelectedFound = false;
+      lastSeen++;
+      if (lastSeen > 8) bSelectedLost = true;
+      // printf("lost\n");
+    }
+
+    if (bSelectedFound) {
+      bSelectedLost = false;
+      lastSeen = 0;
+      selectedHeading = InertialSensor.heading(deg) + selectedAngle;
+      if (selectedHeading >= 360.0) selectedHeading -= 360.0;
+      else if (selectedHeading < 0.0) selectedHeading += 360.0;
+      selectedApprozDistMM = selectedDistMM;
     }
 
     if (curState == ALLSTOP) {
       if (bSelectedFound) nextState = TRACKING;
-      else nextState = SEARCHING_START;
+      else if (bSelectedLost) nextState = SEARCHING_START;
+      else nextState = ALLSTOP;
+      // printf("Allstop\n");
 
     } else if (curState == SEARCHING_START) {
-      Drivetrain.setTurnVelocity(50.0, vex::percent);    
+      Drivetrain.setTurnVelocity(33.0, vex::percent);    
       Drivetrain.turnFor((bWasLeft) ? -360.0 : 360.0, vex::degrees, false);
       startCount = loopCount;
       nextState = SEARCHING;
+      // printf("Searching Start\n");
 
     } else if (curState == SEARCHING) {
       if (bSelectedFound) {
@@ -539,29 +751,38 @@ void runVisionTest()
         nextState = TRACKING;
         // BUGBUG: Never completes
         //      } else if (Drivetrain.isDone()) { 
-      } else if (loopCount - startCount > 200) {
+      } else if (loopCount - startCount > 200) { // TODO: About 5 secs
         Drivetrain.stop(coast);
         nextState = ALLSTOP;
       }
+      // printf("Searching\n");
 
     } else if (curState == TRACKING) {
       float driveSpeed = 0.0;
       float turnSpeed = 0.0;
+      int calcDistMM = 0;
+
+      float currentHeading = InertialSensor.heading(deg);
+      float angleError = selectedHeading - currentHeading;
+      if (angleError > 180.0) angleError -= 360.0;
+      else if (angleError < -180.0) angleError += 360.0;
+
+      // TODO: Update approx distance on drive command
+
       if (bSelectedFound) {
-        if (bSelectedCentered) {
-          if (selectedAngle < -1.0) {
+        if (fabs(angleError) < 15.0) {
+          if (angleError < -1.0) {
             turnSpeed = -5.0;
             bWasLeft = true; 
-          } else if (selectedAngle > 1.0) {
+          } else if (angleError > 1.0) {
             turnSpeed = 5.0;
             bWasLeft = false; 
           }
-          int calcDistMM = 0;
           if (dsDistance > 0) {
             if (dsDistance < 250) calcDistMM = dsDistance;
-            else calcDistMM = (dsDistance + selectedDistMM) / 2; 
+            else calcDistMM = (dsDistance + selectedApprozDistMM) / 2; 
           } else {
-            calcDistMM = selectedDistMM;
+            calcDistMM = selectedApprozDistMM;
           }
           if (calcDistMM > 500) {
             driveSpeed = 50.0;
@@ -571,15 +792,16 @@ void runVisionTest()
             driveSpeed = -5.0;
           }
         } else {
-          if (ISLEFT(selectedX)) {
+          if (angleError < 0.0) {
             turnSpeed = -15.0;    
             bWasLeft = true;
-          } else if (ISRIGHT(selectedX)) {
+          } else if (angleError > 0.0) {
             turnSpeed = 15.0; 
             bWasLeft = false;
           }
         }
         nextState = TRACKING;
+        // printf("Tracking: angErr=%ddeg, d=%dmm\n", (int) angleError, (int) calcDistMM);
       } else {
         // Drivetrain.stop(brake);
         driveSpeed = 0.0;
@@ -590,17 +812,15 @@ void runVisionTest()
       MecanumDrive(driveSpeed, turnSpeed);
 
     } else if (curState == TRACKING) {
-      printf("T\n");
  
     } else if (curState == DRIVE_START) {
-      printf("DS\n");
       nextState = TRACKING;
 
     } else if (curState == DRIVE) {
 
     }
 
-    wait(50, msec);
+    wait(25, msec);
     curState = nextState;
     loopCount++;
   }
@@ -622,70 +842,7 @@ int VisionThread()
   AIVision8.colorDetection(true);
   AIVision8.modelDetection(true);
 
-#ifdef COLMOGO
-  iColRed = (int) AIVision8__YELLOWMOGO.red;
-  iColGreen = (int) AIVision8__YELLOWMOGO.green;
-  iColBlue = (int) AIVision8__YELLOWMOGO.blue;
-  iColHue = (int) AIVision8__YELLOWMOGO.hangle;
-  fColSat = AIVision8__YELLOWMOGO.hdsat;
- 
-  AIVision8__TEMP =
-    new aivision::colordesc(
-      1,
-      iColRed,
-      iColGreen,
-      iColBlue,
-      iColHue,
-      fColSat);
-
-  colPysicalDimMM = MOGOWidthMM;
-  bColDetecHeight = bMogoDetectHeight;
-  colDetectSize = MOGO_DETECTSIZE;
-
-#endif
-
-#ifdef COLGREENTRIBALL
-  iColRed = (int) AIVision8__GRNTRIBALL.red;
-  iColGreen = (int) AIVision8__GRNTRIBALL.green;
-  iColBlue = (int) AIVision8__GRNTRIBALL.blue;
-  iColHue = (int) AIVision8__GRNTRIBALL.hangle;
-  fColSat = AIVision8__GRNTRIBALL.hdsat;
- 
-  AIVision8__TEMP =
-    new aivision::colordesc(
-      1,
-      iColRed,
-      iColGreen,
-      iColBlue,
-      (float) iColHue,
-      fColSat);
-
-  colPysicalDimMM = TriballHeightMM;
-  bColDetecHeight = bTriballDetectHeight;
-  colDetectSize = TRIBALL_DETECTSIZE;
-
-#endif
-
-#ifdef COLREDDONUT
-  fGreenHue = AIVision8__REDDONUT.hangle;
-  fGreenSat = AIVision8__REDDONUT.hdsat;
- 
-  AIVision8__TEMP =
-    new aivision::colordesc(
-      AIVision8__REDDONUT.id,
-      AIVision8__REDDONUT.red,
-      AIVision8__REDDONUT.green,
-      AIVision8__REDDONUT.blue,
-      fGreenHue,
-      fGreenSat);
-
-  colPysicalDimMM = RedRignWidthMM;
-  bColDetecHeight = bRedRingDetectHeight;
-  colDetectSize = REDRING_DETECTSIZE;
-
-#endif
-
-  AIVision8.set(*AIVision8__TEMP);
+  SelectObject(currentTrackingType);
 
   checkGreen(hasGreenCallback);
   checkAIObj(hasAIObjCallback);
@@ -694,11 +851,13 @@ int VisionThread()
   while (true) {
     //uint32_t startTime = vex::timer::system();
     // Takes about 4-6ms
+    SelectObject(currentTrackingType);
+    UpdateDistanceSensor();
     checkGreen.broadcastAndWait();
     checkAIObj.broadcastAndWait();
     //uint32_t endTime = vex::timer::system();
     //printf("time: %lu\n", endTime - startTime);
-    this_thread::sleep_for(20);
+    this_thread::sleep_for(40);
   }
 }
 

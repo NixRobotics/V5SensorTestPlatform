@@ -10,3 +10,5 @@ extern bool bCancelVisionTest;
 void StartVision();
 void printVisionStats();
 void runVisionTest();
+const char *NextObjectType();
+const char *CurrentObject();

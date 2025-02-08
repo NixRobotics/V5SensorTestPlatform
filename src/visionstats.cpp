@@ -3,37 +3,37 @@
 
 using namespace vex;
 
-tVisionSample visionSamples[SAMPLE_WINDOW];
-int curVisionSample = 0;
-tVisionStats visionStats;
+tVisionSample visionSamples[2][SAMPLE_WINDOW];
+int curVisionSample[2] = {0, 0};
+tVisionStats visionStats[2];
 
-void vsAddSample(int count)
+void vsAddSample(int idx, int count)
 {
-    visionSamples[curVisionSample].count = count;
+    visionSamples[idx][curVisionSample[idx]].count = count;
 }
 
-void vsAddSample(int count, int cx, int cy, int size, int d1, int d2, int d3)
+void vsAddSample(int idx, int count, int cx, int cy, int size, int d1, int d2, int d3)
 {
-    visionSamples[curVisionSample].count = count;
-    visionSamples[curVisionSample].x = cx;
-    visionSamples[curVisionSample].y = cy;           
-    visionSamples[curVisionSample].size = size;           
-    visionSamples[curVisionSample].dist1 = d1;
-    visionSamples[curVisionSample].dist2 = d2;
-    visionSamples[curVisionSample].dist3 = d3;    
+    visionSamples[idx][curVisionSample[idx]].count = count;
+    visionSamples[idx][curVisionSample[idx]].x = cx;
+    visionSamples[idx][curVisionSample[idx]].y = cy;           
+    visionSamples[idx][curVisionSample[idx]].size = size;           
+    visionSamples[idx][curVisionSample[idx]].dist1 = d1;
+    visionSamples[idx][curVisionSample[idx]].dist2 = d2;
+    visionSamples[idx][curVisionSample[idx]].dist3 = d3;    
 }
 
-bool vsUpdateSample()
+bool vsUpdateSample(int idx)
 {
-    curVisionSample++;
-    if (curVisionSample >= SAMPLE_WINDOW) {
-      curVisionSample = 0;
+    curVisionSample[idx] = curVisionSample[idx] + 1;
+    if (curVisionSample[idx] >= SAMPLE_WINDOW) {
+      curVisionSample[idx] = 0;
       return true;
     }
     return false;
 }
 
-void calcVisionStats(int iColRed, int iColGreen, int iColBlue, int iColHue, float fColSat)
+void calcVisionStats(int idx, int iColRed, int iColGreen, int iColBlue, int iColHue, float fColSat)
 {
   int validSamples = 0;
   int32_t xTotal = 0;
@@ -46,16 +46,16 @@ void calcVisionStats(int iColRed, int iColGreen, int iColBlue, int iColHue, floa
   int maxSize = 0;
 
   for (int i = 0; i < SAMPLE_WINDOW; i++) {
-    countTotal += visionSamples[i].count;
-    if (visionSamples[i].count > 0) {
+    countTotal += visionSamples[idx][i].count;
+    if (visionSamples[idx][i].count > 0) {
       validSamples++;
-      xTotal += visionSamples[i].x;
-      yTotal += visionSamples[i].y;
-      sizeTotal += visionSamples[i].size;
-      d1Total += visionSamples[i].dist1;
-      d2Total += visionSamples[i].dist2;
-      d3Total += visionSamples[i].dist3;
-      if (visionSamples[i].size > maxSize) maxSize = visionSamples[i].size;
+      xTotal += visionSamples[idx][i].x;
+      yTotal += visionSamples[idx][i].y;
+      sizeTotal += visionSamples[idx][i].size;
+      d1Total += visionSamples[idx][i].dist1;
+      d2Total += visionSamples[idx][i].dist2;
+      d3Total += visionSamples[idx][i].dist3;
+      if (visionSamples[idx][i].size > maxSize) maxSize = visionSamples[idx][i].size;
     } else {
     }
   }
@@ -74,11 +74,11 @@ void calcVisionStats(int iColRed, int iColGreen, int iColBlue, int iColHue, floa
   float countVar = 0.0;
 
   for (int i = 0; i < SAMPLE_WINDOW; i++) {
-    countVar += ((float) visionSamples[i].count - countMean) * ((float) visionSamples[i].count - countMean);
-    if (visionSamples[i].count > 0) {
-      xVar += ((float) visionSamples[i].x - xMean) * ((float) visionSamples[i].x - xMean);
-      yVar += ((float) visionSamples[i].y - yMean) * ((float) visionSamples[i].y - yMean);
-      sizeVar += ((double) visionSamples[i].size - sizeMean) * ((double) visionSamples[i].size - sizeMean);
+    countVar += ((float) visionSamples[idx][i].count - countMean) * ((float) visionSamples[idx][i].count - countMean);
+    if (visionSamples[idx][i].count > 0) {
+      xVar += ((float) visionSamples[idx][i].x - xMean) * ((float) visionSamples[idx][i].x - xMean);
+      yVar += ((float) visionSamples[idx][i].y - yMean) * ((float) visionSamples[idx][i].y - yMean);
+      sizeVar += ((double) visionSamples[idx][i].size - sizeMean) * ((double) visionSamples[idx][i].size - sizeMean);
     } else {
     }
   }
@@ -88,22 +88,22 @@ void calcVisionStats(int iColRed, int iColGreen, int iColBlue, int iColHue, floa
   sizeVar = fabs(sizeVar / (double) validSamples);
   countVar = fabsf(countVar / (float) SAMPLE_WINDOW);
 
-  visionStats.xMean = xMean;
-  visionStats.xVar = xVar;
-  visionStats.yMean = yMean;
-  visionStats.yVar = yVar;
-  visionStats.sizeMean = (float) sizeMean;
-  visionStats.sizeVar = (float) sizeVar;
-  visionStats.maxSize = maxSize;
-  visionStats.countMean = countMean;
-  visionStats.countVar = countVar;
-  visionStats.totalValid = validSamples;
-  visionStats.red = iColRed;
-  visionStats.green = iColGreen;
-  visionStats.blue = iColBlue;
-  visionStats.hue = iColHue;
-  visionStats.sat = fColSat;
-  visionStats.dist1 = (int) d1Mean;
-  visionStats.dist2 = (int) d2Mean;
-  visionStats.dist3 = (int) d3Mean;
+  visionStats[idx].xMean = xMean;
+  visionStats[idx].xVar = xVar;
+  visionStats[idx].yMean = yMean;
+  visionStats[idx].yVar = yVar;
+  visionStats[idx].sizeMean = (float) sizeMean;
+  visionStats[idx].sizeVar = (float) sizeVar;
+  visionStats[idx].maxSize = maxSize;
+  visionStats[idx].countMean = countMean;
+  visionStats[idx].countVar = countVar;
+  visionStats[idx].totalValid = validSamples;
+  visionStats[idx].red = iColRed;
+  visionStats[idx].green = iColGreen;
+  visionStats[idx].blue = iColBlue;
+  visionStats[idx].hue = iColHue;
+  visionStats[idx].sat = fColSat;
+  visionStats[idx].dist1 = (int) d1Mean;
+  visionStats[idx].dist2 = (int) d2Mean;
+  visionStats[idx].dist3 = (int) d3Mean;
 }

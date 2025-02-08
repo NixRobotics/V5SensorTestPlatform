@@ -94,16 +94,66 @@ void runGyroTest()
   OnButtonAPressed();
 }
 
+typedef enum EAUTOMODE {
+  AUTONONE = 0,
+  AUTONORTH = 1,
+  AUTOLEFT = 2
+};
+
 bool bCancelDriverControl = false;
 bool bStraightenHeading = false;
 bool bStraightenLeftSide = false;
 bool bAutoCommandRunning = false;
 
+double RAD_TO_DEG = 180.0 / M_PI;
+double DEG_TO_RAD = M_PI / 180.0;
+
+bool getWallAngle(float *out_wallAngle = NULL, float *out_wallDistance = NULL)
+{
+  float dsep = 15.0;
+  float dfront = -1.0;
+  float dback = -1.0;
+  float ddelta = 0.0;
+  bool turnLeft = false;
+  bool turnRight = false;
+  float wallAngle = 0.0;
+  float wallDistance = 0.0;
+  bool bValid = false;
+  if (DistanceLeftFront.isObjectDetected()) dfront = DistanceLeftFront.objectDistance(distanceUnits::in);
+  if (DistanceLeftRear.isObjectDetected()) dback = DistanceLeftRear.objectDistance(distanceUnits::in);
+  // printf("Distance %f %f\n", dfront, dback);
+  if ((dfront >= 0.0) && (dback >= 0.0) && (fabs(dfront - dback) < dsep)) {
+    bValid = true;
+    wallDistance = (dfront + dback) / 2.0;
+    if (dfront > dback) {
+      ddelta = dfront - dback;
+      wallAngle = atanf(ddelta / dsep) * RAD_TO_DEG;
+      turnLeft = true;
+    } else if (dfront < dback) {
+      ddelta = dback - dfront;
+      wallAngle = atanf(ddelta / dsep) * RAD_TO_DEG;
+      turnRight = true;
+    }
+  }
+
+  if (out_wallDistance != NULL) *out_wallDistance = wallDistance;
+
+  if (turnLeft) {
+    // printf("TURN LEFT %f\n", wallAngle);
+    if (out_wallAngle != NULL) *out_wallAngle = -wallAngle;
+  } else if (turnRight) {
+    // printf("TURN RIGHT %f\n", wallAngle);
+    if (out_wallAngle != NULL) *out_wallAngle = wallAngle;
+    return(wallAngle);
+  }
+
+  return bValid;
+}
+
+
 void DriverControl()
 {
-  bStraightenHeading = false;
-  bStraightenLeftSide = false;
-  bAutoCommandRunning = false; double endHeading = InertialSensor.heading(vex::degrees);
+  double endHeading = InertialSensor.heading(vex::degrees);
 
   // double endHeading = Drivetrain.heading(vex::degrees);
   Brain.Screen.print("%.0lf", endHeading);
@@ -111,10 +161,12 @@ void DriverControl()
   printf("heading: %0.2lf, %0.2lf\n", InertialSensor.heading(degrees), Drivetrain.heading());
   printf("%0.2lf, %0.2lf, %0.2lf\n", InertialSensor.roll(), InertialSensor.pitch(), InertialSensor.yaw());
   
-  Controller1.Screen.setCursor(3, 1);
-  Controller1.Screen.print("H: %03d", (int) InertialSensor.heading(degrees));
-  Controller1.Screen.newLine();
+  // Controller1.Screen.setCursor(3, 1);
+  // Controller1.Screen.print("H: %03d", (int) InertialSensor.heading(degrees));
+  // Controller1.Screen.newLine();
 
+  EAUTOMODE autoMode = AUTONONE;
+  float holdHeading = 0.0;
   int count = 0;
 
   while (!bCancelDriverControl) {
@@ -127,29 +179,93 @@ void DriverControl()
     // update your motors, etc.
     // ........................................................................
 
-    if (!bAutoCommandRunning) {
-      if (bStraightenHeading) {
+    bool bStartAutoCommand = false;
+
+    if (autoMode == AUTONONE) {
+      if (!bAutoCommandRunning) {
+        if (bStraightenHeading) {
+          autoMode = AUTONORTH;
+          bStartAutoCommand = true;
+        }
+        else if (bStraightenLeftSide) {
+          autoMode = AUTOLEFT;
+          bStartAutoCommand = true;
+        }
+      }
+    } else {
+      if (!bAutoCommandRunning) {
+        if (autoMode == AUTONORTH && !bStraightenHeading) autoMode = AUTONONE;
+        else if (autoMode == AUTOLEFT && !bStraightenLeftSide) autoMode = AUTONONE;
+      }
+    }
+
+    if (bStartAutoCommand) {
+      if (autoMode == AUTONORTH) {
         bAutoCommandRunning = true;
+        bStartAutoCommand = false;
         Drivetrain.stop(coast);
         Drivetrain.setTurnVelocity(50,percent);
         Drivetrain.turnToHeading(0.0,degrees,false);
       }
-    } else {
-      if (bStraightenHeading) {
+      else if (autoMode == AUTOLEFT) {
+        bStartAutoCommand = false;
+        float wallAngle, wallDistance;
+        if (getWallAngle(&wallAngle, &wallDistance)) {
+          bAutoCommandRunning = true;
+          Drivetrain.stop(coast);
+          Drivetrain.setTurnVelocity(50,percent);
+          Drivetrain.turnFor(wallAngle,degrees,false);
+        }
+      }
+    } else if (bAutoCommandRunning) {
+      if (autoMode == AUTONORTH) {
         if (!Drivetrain.isTurning()) {
           Drivetrain.stop(coast);
           bAutoCommandRunning = false;
-          bStraightenHeading = false;
+          holdHeading = Drivetrain.heading();
+        }
+      }
+      else if (autoMode == AUTOLEFT) {
+        if (!Drivetrain.isTurning()) {
+          Drivetrain.stop(coast);
+          bAutoCommandRunning = false;
+          holdHeading = Drivetrain.heading();
         }
       }
     }
 
+    float driveSpeed = Controller1.Axis3.position(vex::percent);
+    float turnSpeed = Controller1.Axis4.position(vex::percent);
+    float strafeSpeed = Controller1.Axis1.position(vex::percent);
+
+    if (autoMode == AUTONORTH) {
+      turnSpeed = 0.0;
+      strafeSpeed = 0.0;
+      float headingError = holdHeading - Drivetrain.heading();
+      
+      if (headingError > 180) headingError = headingError - 360.0;
+      else if (headingError < -180) headingError = headingError + 360.0;
+
+
+      turnSpeed = headingError;
+      if (turnSpeed > 5.0) turnSpeed = 5.0;
+      else if (turnSpeed < -5.0) turnSpeed = -5.0;
+    }
+    else if (autoMode == AUTOLEFT) {
+      turnSpeed = 0.0;
+      strafeSpeed = 0.0;
+      float wallAngle, wallDistance;
+      if (getWallAngle(&wallAngle, &wallDistance)) {
+        float headingError = wallAngle;
+        
+        turnSpeed = headingError;
+        if (turnSpeed > 10.0) turnSpeed = 10.0;
+        else if (turnSpeed < -10.0) turnSpeed = -10.0;
+      }
+    }
+
     if (!bAutoCommandRunning) {
-      MecanumDrive(
-        Controller1.Axis3.position(vex::percent),
-        Controller1.Axis4.position(vex::percent),
-        Controller1.Axis1.position(vex::percent)
-        );
+      MecanumDrive(driveSpeed, turnSpeed, strafeSpeed);
     }
 
     // Drivetrain.arcade(forward, -turn);
@@ -158,8 +274,7 @@ void DriverControl()
                     // prevent wasted resources.
     count++;
     if (count == 50) {
-      double RAD_TO_DEG = 180.0 / M_PI;
-      double DEG_TO_RAD = M_PI / 180.0;
+
       double Ax = InertialSensor.acceleration(vex::axisType::xaxis);
       double Ay = InertialSensor.acceleration(vex::axisType::yaxis);
       double Az = InertialSensor.acceleration(vex::axisType::zaxis);
@@ -167,9 +282,9 @@ void DriverControl()
       double pitch = -(180.0 + atan2(Ax, Az) * RAD_TO_DEG);
       double Ax_r = Ax * sin(pitch * DEG_TO_RAD);
 
-      printf("heading: %0.2lf, %0.2lf\n", InertialSensor.heading(degrees), Drivetrain.heading());
-      printf("roll: %0.2lf/%0.2lf, pitch: %0.2lf/%0.2lf, yaw: %0.2lf\n", InertialSensor.roll(), roll, InertialSensor.pitch(), pitch, InertialSensor.yaw());
-      printf("X: %0.5lf/%-.5lf, Y: %0.5lf, Z: %0.5lf\n", Ax, Ax_r, Ay, Az);
+      // printf("heading: %0.2lf, %0.2lf\n", InertialSensor.heading(degrees), Drivetrain.heading());
+      // printf("roll: %0.2lf/%0.2lf, pitch: %0.2lf/%0.2lf, yaw: %0.2lf\n", InertialSensor.roll(), roll, InertialSensor.pitch(), pitch, InertialSensor.yaw());
+      // printf("X: %0.5lf/%-.5lf, Y: %0.5lf, Z: %0.5lf\n", Ax, Ax_r, Ay, Az);
 
       int leftFrontDist = -1, leftRearDist = -1;
       if (DistanceLeftFront.isObjectDetected() && DistanceLeftFront.objectSize() == sizeType::large) {
@@ -181,10 +296,10 @@ void DriverControl()
 
       printf("F: %d, R: %d\n", leftFrontDist, leftRearDist);
 
-      Controller1.Screen.clearLine(3);
-      Controller1.Screen.setCursor(3, 1);
-      Controller1.Screen.print("H:%03d,F:%d,R:%d", (int) InertialSensor.heading(degrees), leftFrontDist, leftRearDist);
-      Controller1.Screen.newLine();
+      // Controller1.Screen.clearLine(3);
+      // Controller1.Screen.setCursor(3, 1);
+      // Controller1.Screen.print("H:%03d,F:%d,R:%d", (int) InertialSensor.heading(degrees), leftFrontDist, leftRearDist);
+      // Controller1.Screen.newLine();
 
       count = 0;
     }
@@ -330,13 +445,27 @@ void OnButtonXPressed()
 void OnButtonUpPressed()
 {
   if (bAutoCommandRunning) return;
-  bStraightenHeading = true;
+  if (bStraightenHeading) bStraightenHeading = false;
+  else {
+    bStraightenHeading = true;
+    bStraightenLeftSide = false;
+  }
 }
 
 void OnButtonLeftPressed()
 {
   if (bAutoCommandRunning) return;
-  bStraightenLeftSide = true;
+  if (bStraightenLeftSide) bStraightenLeftSide = false;
+  else {
+    bStraightenLeftSide = true;
+    bStraightenHeading = false;
+  }
+}
+
+
+void OnButtonR1Pressed()
+{
+  NextObjectType();
 }
 
 #ifdef VISIONOPT
@@ -371,6 +500,8 @@ void usercontrol(void) {
   #endif
   Controller1.ButtonUp.pressed(OnButtonUpPressed);
   Controller1.ButtonLeft.pressed(OnButtonLeftPressed);
+  
+  Controller1.ButtonR1.pressed(OnButtonR1Pressed);
 
   uiMode = UIIDLE;
 
@@ -403,6 +534,8 @@ void usercontrol(void) {
         Controller1.Screen.print("driver control");
         Controller1.Screen.newLine();
         Controller1.Screen.print("X: to cancel");
+        Controller1.Screen.newLine();
+        Controller1.Screen.print("U: Nth, L: Wall");
       }
       else if (uiMode == UIVISIONTEST) {
         Controller1.Screen.clearScreen();
@@ -419,6 +552,12 @@ void usercontrol(void) {
         Controller1.Screen.print("A: to cancel");
       }
       lastUiMode = uiMode;
+    }
+
+    if (uiMode == UIVISIONTEST) {
+      Controller1.Screen.setCursor(3, 1);
+      Controller1.Screen.print("R1: %s  ", CurrentObject());
+      Controller1.Screen.newLine();
     }
     
     wait(100, msec); // Sleep the task for a short amount of time to
@@ -445,6 +584,7 @@ int main() {
   // Prevent main from exiting with an infinite loop.
   while (true) {
     wait(1, seconds);
+    getWallAngle();
     printVisionStats();
   }
 }

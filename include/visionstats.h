@@ -24,11 +24,12 @@ struct tVisionSample {
 
 #define SAMPLE_WINDOW 100
 
-void vsAddSample(int count, int cx, int cy, int size, int d1, int d2, int d3);
-void vsAddSample(int count);
-bool vsUpdateSample();
-void calcVisionStats(int iColRed, int iColGreen, int iColBlue, int iColHue, float fCotSat);
+void vsAddSample(int idx, int count, int cx, int cy, int size, int d1, int d2, int d3);
+void vsAddSample(int idx, int count);
+bool vsUpdateSample(int idx);
+void calcVisionStats(int idx, int iColRed, int iColGreen, int iColBlue, int iColHue, float fCotSat);
 
-extern tVisionStats visionStats;
+extern tVisionStats visionStats[];
+extern int curVisionSample[];
 
 #endif
